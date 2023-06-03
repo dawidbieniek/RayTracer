@@ -1,0 +1,44 @@
+﻿  Compiling CUDA source file main.cu...
+  
+  D:\Projekty\RayTracer>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\bin\nvcc.exe" -gencode=arch=compute_52,code=\"sm_52,compute_52\" --use-local-env -ccbin "E:\VisualStudio\2022\Preview\VC\Tools\MSVC\14.37.32705\bin\HostX64\x64" -x cu   -ID:\Projekty\RayTracer\packages\nupengl.core.0.1.0.1\build\native\../..//build/native/include/ -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include"  -G   --keep-dir x64\Debug  -maxrregcount=0   --machine 64 --compile -cudart static  -g  -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /FS /Zi /RTC1 /MDd " -Xcompiler "/Fdx64\Debug\vc143.pdb" -o D:\Projekty\RayTracer\x64\Debug\main.cu.obj "D:\Projekty\RayTracer\main.cu" 
+D:\Projekty\RayTracer\main.cu(40): warning #20096-D: address of a host variable "std::cout" cannot be directly taken in a device function
+    	std::cout << "Thread: " << threadIdx.x << threadIdx.x << std::endl;
+    	     ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+D:\Projekty\RayTracer\main.cu(91): warning #177-D: variable "a" was declared but never referenced
+    	const int a[arraySize] = { 1, 2, 3, 4, 5 };
+    	          ^
+  
+D:\Projekty\RayTracer\main.cu(92): warning #177-D: variable "b" was declared but never referenced
+    	const int b[arraySize] = { 10, 20, 30, 40, 50 };
+    	          ^
+  
+D:\Projekty\RayTracer\main.cu(93): warning #177-D: variable "c" was declared but never referenced
+    	int c[arraySize] = { 0 };
+    	    ^
+  
+D:\Projekty\RayTracer\main.cu(40): error : calling a __host__ function("std::basic_ostream<char, std::char_traits<char> >::operator <<(::std::basic_ostream<char, std::char_traits<char> >&(*)(::std::basic_ostream<char, std::char_traits<char> >&))") from a __global__ function("render") is not allowed
+  
+D:\Projekty\RayTracer\main.cu(40): error : identifier "std::basic_ostream<char, std::char_traits<char> >::operator <<" is undefined in device code
+  
+D:\Projekty\RayTracer\main.cu(40): error : calling a __host__ function("std::basic_ostream<char, std::char_traits<char> >::operator <<(unsigned int)") from a __global__ function("render") is not allowed
+  
+D:\Projekty\RayTracer\main.cu(40): error : identifier "std::basic_ostream<char, std::char_traits<char> >::operator <<" is undefined in device code
+  
+D:\Projekty\RayTracer\main.cu(40): error : calling a __host__ function("std::basic_ostream<char, std::char_traits<char> >::operator <<(unsigned int)") from a __global__ function("render") is not allowed
+  
+D:\Projekty\RayTracer\main.cu(40): error : identifier "std::basic_ostream<char, std::char_traits<char> >::operator <<" is undefined in device code
+  
+D:\Projekty\RayTracer\main.cu(40): error : calling a __host__ function("std::basic_ostream<char, T1>  &  ::std::operator <<<    ::std::char_traits<char> > (    ::std::basic_ostream<char, T1>  &, const char *)") from a __global__ function("render") is not allowed
+  
+D:\Projekty\RayTracer\main.cu(40): error : identifier "std::operator <<<    ::std::char_traits<char> > " is undefined in device code
+  
+D:\Projekty\RayTracer\main.cu(40): error : identifier "std::cout" is undefined in device code
+  
+D:\Projekty\RayTracer\main.cu(40): error : identifier "std::endl<char,     ::std::char_traits<char> > " is undefined in device code
+  
+  10 errors detected in the compilation of "D:/Projekty/RayTracer/main.cu".
+  main.cu
+E:\VisualStudio\2022\Preview\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.1.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\bin\nvcc.exe" -gencode=arch=compute_52,code=\"sm_52,compute_52\" --use-local-env -ccbin "E:\VisualStudio\2022\Preview\VC\Tools\MSVC\14.37.32705\bin\HostX64\x64" -x cu   -ID:\Projekty\RayTracer\packages\nupengl.core.0.1.0.1\build\native\../..//build/native/include/ -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include"  -G   --keep-dir x64\Debug  -maxrregcount=0   --machine 64 --compile -cudart static  -g  -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /FS /Zi /RTC1 /MDd " -Xcompiler "/Fdx64\Debug\vc143.pdb" -o D:\Projekty\RayTracer\x64\Debug\main.cu.obj "D:\Projekty\RayTracer\main.cu"" exited with code 1.
