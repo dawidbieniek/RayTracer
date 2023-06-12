@@ -36,6 +36,7 @@ static const unsigned int FPS_DISPLAY_REFRESH_TIME = 500;
 const int screenWidth = 960;
 const int screenHeight = 480;
 
+#define ASPECT_RATIO (float)screenWidth / screenHeight
 
 __device__ bool hitSphere(const vec3& center, float radius, const ray& r)
 {
@@ -183,7 +184,7 @@ int main(int argc, char** args)
 
 	initGL(argc, args);
 
-	render << <blocks, threads >> > (fb, screenWidth, screenHeight, vec3(-2.0, -1.0, -1.0), vec3(4.0, 0.0, 0.0), vec3(0.0, 2.0, 0.0), vec3(0.0, 0.0, 0.0));
+	render << <blocks, threads >> > (fb, screenWidth, screenHeight, vec3(-2.0, -1.0, -1.0), vec3(2 * ASPECT_RATIO, 0.0, 0.0), vec3(0.0, 2.0, 0.0), vec3(0.0, 0.0, 0.0));
 	checkCudaErrors(cudaGetLastError());
 	checkCudaErrors(cudaDeviceSynchronize());
 
