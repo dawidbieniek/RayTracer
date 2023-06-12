@@ -1,5 +1,6 @@
 // Standard libs
 #include <iostream>
+#include <memory>
 
 // GL libs
 #include <GL/glut.h>
@@ -16,7 +17,7 @@ void check_cuda(cudaError_t result, char const* const func, const char* const fi
 	if (result)
 	{
 		// Print message
-		std::cerr << "CUDA error = " << static_cast<unsigned int>(result) << " at " << file << ":" << line << " '" << func << "' \n";
+		std::cerr << "CUDA error = " << static_cast<unsigned int>(result) << " at " << file << ":" << line << " '" << func << "' \n" << cudaGetErrorString(result) << "\n";
 		// Reset GPU
 		cudaDeviceReset();
 		exit(EXIT_FAILURE);
@@ -29,6 +30,9 @@ void check_cuda(cudaError_t result, char const* const func, const char* const fi
 
 #include "vec3.h"
 #include "ray.h"
+#include "scene.h"
+#include "rayHittable.h"
+#include "sphere.h"
 
 static const int TARGET_FPS = 60;
 static const unsigned int FPS_DISPLAY_REFRESH_TIME = 500;
@@ -37,6 +41,16 @@ const int screenWidth = 960;
 const int screenHeight = 480;
 
 #define ASPECT_RATIO (float)screenWidth / screenHeight
+
+__global__ void createScene(rayHittable** dObjects, scene** dScene)
+{
+	if (threadIdx.x == 0 && blockIdx.x == 0)
+	{
+		*(dObjects) = new sphere(vec3(0, 0, -2), 0.5);
+		*(dObjects + 1) = new sphere(vec3(-2, -1, -5), 1);
+		*dScene = new scene(dObjects, 2);
+	}
+}
 
 // Returns length of ray from origin to hit point. -1 if not hit
 __device__ double sphereHitPoint(const vec3& center, float radius, const ray& r)
@@ -51,24 +65,20 @@ __device__ double sphereHitPoint(const vec3& center, float radius, const ray& r)
 	return (-half_b - sqrt(discriminant)) / a;
 }
 
-__device__ vec3 color(const ray& r)
+__device__ vec3 color(const ray& r, scene** dScene)
 {
-	double t = sphereHitPoint(vec3(0, 0, -1), 0.5, r);
-
-	// Render sphere
-	if (t > 0.0)
+	hitInfo hit;
+	if ((*dScene)->hit(r, 0, 100, hit))
 	{
-		vec3 N = unit_vector(r.at(t) - vec3(0, 0, -1));
-		return 0.5 * vec3(N.x() + 1, N.y() + 1, N.z() + 1);
+		return 0.5 * (hit.normal + vec3(1.0, 1.0, 1.0));
 	}
 
-	// Background color - sky blue with gradient
-	vec3 unitDirection = unit_vector(r.direction());
-	t = 0.5f * (unitDirection.y() + 1.0f);
-	return (1.0f - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
+	vec3 dir = unit_vector(r.direction());
+	float t = 0.5 * (dir.y() + 1.0);
+	return (1.0 - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
 }
 
-__global__ void render(vec3* fb, int maxX, int maxY, vec3 lowerLeftCorner, vec3 horizontal, vec3 vertical, vec3 origin)
+__global__ void render(vec3* fb, int maxX, int maxY, vec3 lowerLeftCorner, vec3 horizontal, vec3 vertical, vec3 origin, scene** dScene)
 {
 	int i = threadIdx.x + blockIdx.x * blockDim.x;
 	int j = threadIdx.y + blockIdx.y * blockDim.y;
@@ -79,7 +89,7 @@ __global__ void render(vec3* fb, int maxX, int maxY, vec3 lowerLeftCorner, vec3 
 	float u = float(i) / float(maxX);
 	float v = float(j) / float(maxY);
 	ray r(origin, lowerLeftCorner + u * horizontal + v * vertical);
-	fb[pixelIndex] = color(r);
+	fb[pixelIndex] = color(r, dScene);
 }
 
 vec3* fb;
@@ -186,6 +196,15 @@ int main(int argc, char** args)
 	size_t fbSize = numPixels * sizeof(vec3);
 	checkCudaErrors(cudaMallocManaged(&fb, fbSize));
 
+	rayHittable** dObjects;
+	checkCudaErrors(cudaMallocManaged((void**)&dObjects, 2 * sizeof(rayHittable*)));
+	scene** dScene;
+	checkCudaErrors(cudaMallocManaged((void**)&dScene, sizeof(scene)));
+
+	createScene <<<1, 1>>> (dObjects, dScene);
+	checkCudaErrors(cudaGetLastError());
+	checkCudaErrors(cudaDeviceSynchronize());
+
 	int tx = 8;
 	int ty = 8;
 	dim3 blocks(screenWidth / tx + 1, screenHeight / ty + 1);
@@ -193,7 +212,7 @@ int main(int argc, char** args)
 
 	initGL(argc, args);
 
-	render << <blocks, threads >> > (fb, screenWidth, screenHeight, vec3(-2.0, -1.0, -1.0), vec3(2 * ASPECT_RATIO, 0.0, 0.0), vec3(0.0, 2.0, 0.0), vec3(0.0, 0.0, 0.0));
+	render <<<blocks, threads >>> (fb, screenWidth, screenHeight, vec3(-2.0, -1.0, -1.0), vec3(2 * ASPECT_RATIO, 0.0, 0.0), vec3(0.0, 2.0, 0.0), vec3(0.0, 0.0, 0.0), dScene);
 	checkCudaErrors(cudaGetLastError());
 	checkCudaErrors(cudaDeviceSynchronize());
 

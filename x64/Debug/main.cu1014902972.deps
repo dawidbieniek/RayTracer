@@ -157,6 +157,9 @@ C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include\vector_types.h
 D:\Projekty\RayTracer\packages\nupengl.core.0.1.0.1\build\native\include\GL\freeglut_std.h
 D:\Projekty\RayTracer\packages\nupengl.core.0.1.0.1\build\native\include\GL\glut.h
 D:\Projekty\RayTracer\ray.h
+D:\Projekty\RayTracer\rayHittable.h
+D:\Projekty\RayTracer\scene.h
+D:\Projekty\RayTracer\sphere.h
 D:\Projekty\RayTracer\vec3.h
 E:\VisualStudio\2022\Preview\VC\Tools\MSVC\14.37.32705\include\atomic
 E:\VisualStudio\2022\Preview\VC\Tools\MSVC\14.37.32705\include\cctype

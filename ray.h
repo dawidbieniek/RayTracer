@@ -5,13 +5,13 @@
 class ray
 {
 public:
-    __device__ ray() {}
+    __device__ __host__ ray() {}
     // Creates ray from origin point and direction vector 
-    __device__ ray(const vec3& origin, const vec3& dir) { _origin = origin; _dir = dir; }
-    __device__ vec3 origin() const { return _origin; }
-    __device__ vec3 direction() const { return _dir; }
+    __device__ __host__ ray(const vec3& origin, const vec3& dir) { _origin = origin; _dir = dir; }
+    __device__ __host__ vec3 origin() const { return _origin; }
+    __device__ __host__ vec3 direction() const { return _dir; }
     // Returns point reached by ray of length t
-    __device__ vec3 at(float t) const { return _origin + t * _dir; }
+    __device__ __host__ vec3 at(float t) const { return _origin + t * _dir; }
 
 private:
     vec3 _origin;
