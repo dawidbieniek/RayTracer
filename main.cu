@@ -11,25 +11,33 @@
 // My libs
 //#include "cudaHelpers.h"
 // TMP
-void check_cuda(cudaError_t result, char const* const func, const char* const file, int const line) {
-	if (result) {
-		std::cerr << "CUDA error = " << static_cast<unsigned int>(result) << " at " <<
-			file << ":" << line << " '" << func << "' \n";
-		// Make sure we call CUDA Device Reset before exiting
+void check_cuda(cudaError_t result, char const* const func, const char* const file, int const line)
+{
+	if (result)
+	{
+		// Print message
+		std::cerr << "CUDA error = " << static_cast<unsigned int>(result) << " at " << file << ":" << line << " '" << func << "' \n";
+		// Reset GPU
 		cudaDeviceReset();
-		exit(99);
+		exit(EXIT_FAILURE);
 	}
 }
 
+// Wrapper define
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
 // !TMP
+
 #include "vec3.h"
 #include "ray.h"
 
-int screenWidth = 960;
-int screenHeight = 480;
+static const int TARGET_FPS = 60;
+static const unsigned int FPS_DISPLAY_REFRESH_TIME = 500;
 
-__device__ bool hit_sphere(const vec3& center, float radius, const ray& r) 
+const int screenWidth = 960;
+const int screenHeight = 480;
+
+
+__device__ bool hitSphere(const vec3& center, float radius, const ray& r)
 {
 	vec3 oc = r.origin() - center;
 	float a = dot(r.direction(), r.direction());
@@ -39,11 +47,12 @@ __device__ bool hit_sphere(const vec3& center, float radius, const ray& r)
 	return (discriminant > 0.0f);
 }
 
-__device__ vec3 color(const ray& r) 
+__device__ vec3 color(const ray& r)
 {
-	if (hit_sphere(vec3(0, 0, -1), 0.5, r))
+	if (hitSphere(vec3(0, 0, -1), 0.5, r))
 		return vec3(1, 0, 0);
-	// Tlo
+
+	// Background color - sky blue with gradient
 	vec3 unitDirection = unit_vector(r.direction());
 	float t = 0.5f * (unitDirection.y() + 1.0f);
 	return (1.0f - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
@@ -53,20 +62,69 @@ __global__ void render(vec3* fb, int maxX, int maxY, vec3 lowerLeftCorner, vec3 
 {
 	int i = threadIdx.x + blockIdx.x * blockDim.x;
 	int j = threadIdx.y + blockIdx.y * blockDim.y;
+
 	if ((i >= maxX) || (j >= maxY)) return;
-	int pixel_index = j * maxX + i;
+
+	int pixelIndex = j * maxX + i;
 	float u = float(i) / float(maxX);
 	float v = float(j) / float(maxY);
 	ray r(origin, lowerLeftCorner + u * horizontal + v * vertical);
-	fb[pixel_index] = color(r);
+	fb[pixelIndex] = color(r);
 }
 
 vec3* fb;
+
+int lastFrameTime = 0;
+int deltaTimes[TARGET_FPS];
+int deltaTimesIndex = 0;
+
+void refreshFrameCallback(int value)
+{
+	if (glutGetWindow()) 
+	{
+		int currentTime = glutGet(GLUT_ELAPSED_TIME);
+		int deltaTime = currentTime - lastFrameTime;
+		lastFrameTime = currentTime;
+		deltaTimes[deltaTimesIndex++] = deltaTime;
+		if (deltaTimesIndex >= TARGET_FPS)
+			deltaTimesIndex = 0;
+
+		// Refresh window
+		glutPostRedisplay();
+		// Refresh callback
+		glutTimerFunc((unsigned int)(1000.0 / TARGET_FPS), refreshFrameCallback, NULL);
+	}
+}
+
+void displayFPSCountCallback(int value)
+{
+	if (glutGetWindow())
+	{
+		float fpsCount = 0;
+		int i;
+		for (i = 0; i < TARGET_FPS; i++)
+		{
+			if (deltaTimes[i] == 0)
+				break;
+			fpsCount += deltaTimes[i];
+		}
+
+		fpsCount  = 1000.0 / (fpsCount / i + 1);
+
+		char titleBuffer[16];
+		sprintf(titleBuffer, "FPS: %3.1f", fpsCount);
+		glutSetWindowTitle(titleBuffer);
+
+		// Refresh callback
+		glutTimerFunc(FPS_DISPLAY_REFRESH_TIME, displayFPSCountCallback, NULL);
+	}
+}
 
 void draw()
 {
 	glBegin(GL_POINTS);
 
+	// Draw out texture
 	glPointSize(1.0);
 	for (int y = 0; y < screenHeight; y++)
 	{
@@ -74,16 +132,14 @@ void draw()
 		{
 			int ind = y * screenWidth + x;
 
-			glColor3f(fb[ind].r(), fb[ind].g(), fb[ind].b());
+			glColor3f(fb[ind].x(), fb[ind].y(), fb[ind].z());
 			glVertex2f(x, y);
 		}
 	}
-
 	glEnd();
 }
 
-
-void display()
+void displayCallback()
 {
 	glClear(GL_COLOR_BUFFER_BIT);
 	draw();
@@ -95,30 +151,9 @@ void cleanup()
 	checkCudaErrors(cudaFree(fb));
 }
 
-int main(int argc, char** argv)
+void initGL(int argc, char **args)
 {
-	// Example
-	const int arraySize = 5;
-	const int a[arraySize] = { 1, 2, 3, 4, 5 };
-	const int b[arraySize] = { 10, 20, 30, 40, 50 };
-	int c[arraySize] = { 0 };
-
-	// Good
-	int numPixels = screenWidth * screenHeight;
-	size_t fbSize = numPixels * sizeof(vec3);
-	checkCudaErrors(cudaMallocManaged(&fb, fbSize));
-
-	int tx = 8;
-	int ty = 8;
-	dim3 blocks(screenWidth / tx + 1, screenHeight / ty + 1);
-	dim3 threads(tx, ty);
-
-	render <<<blocks, threads >>> (fb, screenWidth, screenHeight, vec3(-2.0, -1.0, -1.0), vec3(4.0, 0.0, 0.0), vec3(0.0, 2.0, 0.0), vec3(0.0, 0.0, 0.0));
-	checkCudaErrors(cudaGetLastError());
-	checkCudaErrors(cudaDeviceSynchronize());
-
-	// GL Init
-	glutInit(&argc, argv);
+	glutInit(&argc, args);
 	glutInitDisplayMode(GLUT_RGBA);
 	glutInitWindowSize(screenWidth, screenHeight);
 	glutInitWindowPosition(10, 10);
@@ -129,30 +164,30 @@ int main(int argc, char** argv)
 	glMatrixMode(GL_MODELVIEW);
 
 	glClearColor(1.0, 0.0, 1.0, 0.0);
-	
-	glutDisplayFunc(display);
+
+	glutDisplayFunc(displayCallback);
+	glutTimerFunc((unsigned int)(1000.0 / TARGET_FPS), refreshFrameCallback, NULL);
+	glutTimerFunc(FPS_DISPLAY_REFRESH_TIME, displayFPSCountCallback, NULL);
+}
+
+int main(int argc, char** args)
+{
+	int numPixels = screenWidth * screenHeight;
+	size_t fbSize = numPixels * sizeof(vec3);
+	checkCudaErrors(cudaMallocManaged(&fb, fbSize));
+
+	int tx = 8;
+	int ty = 8;
+	dim3 blocks(screenWidth / tx + 1, screenHeight / ty + 1);
+	dim3 threads(tx, ty);
+
+	initGL(argc, args);
+
+	render << <blocks, threads >> > (fb, screenWidth, screenHeight, vec3(-2.0, -1.0, -1.0), vec3(4.0, 0.0, 0.0), vec3(0.0, 2.0, 0.0), vec3(0.0, 0.0, 0.0));
+	checkCudaErrors(cudaGetLastError());
+	checkCudaErrors(cudaDeviceSynchronize());
+
 	glutMainLoop();
-
-	//cleanup();
-	//std::cout << "End of program" << std::endl;
-
-	//// Add vectors in parallel.
-	//cudaError_t cudaStatus = addWithCuda(c, a, b, arraySize);
-	//if (cudaStatus != cudaSuccess) {
-	//	fprintf(stderr, "addWithCuda failed!");
-	//	return 1;
-	//}
-
-	//printf("{1,2,3,4,5} + {10,20,30,40,50} = {%d,%d,%d,%d,%d}\n",
-	//	c[0], c[1], c[2], c[3], c[4]);
-
-	//// cudaDeviceReset must be called before exiting in order for profiling and
-	//// tracing tools such as Nsight and Visual Profiler to show complete traces.
-	//cudaStatus = cudaDeviceReset();
-	//if (cudaStatus != cudaSuccess) {
-	//	fprintf(stderr, "cudaDeviceReset failed!");
-	//	return 1;
-	//}
 
 	return 0;
 }
