@@ -38,24 +38,33 @@ const int screenHeight = 480;
 
 #define ASPECT_RATIO (float)screenWidth / screenHeight
 
-__device__ bool hitSphere(const vec3& center, float radius, const ray& r)
+// Returns length of ray from origin to hit point. -1 if not hit
+__device__ double sphereHitPoint(const vec3& center, float radius, const ray& r)
 {
 	vec3 oc = r.origin() - center;
-	float a = dot(r.direction(), r.direction());
-	float b = 2.0f * dot(oc, r.direction());
-	float c = dot(oc, oc) - radius * radius;
-	float discriminant = b * b - 4.0f * a * c;
-	return (discriminant > 0.0f);
+	auto a = r.direction().lengthSquared();
+	auto half_b = dot(oc, r.direction());
+	auto c = oc.lengthSquared() - radius * radius;
+	auto discriminant = half_b * half_b - a * c;
+
+	if (discriminant < 0) return -1.0;
+	return (-half_b - sqrt(discriminant)) / a;
 }
 
 __device__ vec3 color(const ray& r)
 {
-	if (hitSphere(vec3(0, 0, -1), 0.5, r))
-		return vec3(1, 0, 0);
+	double t = sphereHitPoint(vec3(0, 0, -1), 0.5, r);
+
+	// Render sphere
+	if (t > 0.0)
+	{
+		vec3 N = unit_vector(r.at(t) - vec3(0, 0, -1));
+		return 0.5 * vec3(N.x() + 1, N.y() + 1, N.z() + 1);
+	}
 
 	// Background color - sky blue with gradient
 	vec3 unitDirection = unit_vector(r.direction());
-	float t = 0.5f * (unitDirection.y() + 1.0f);
+	t = 0.5f * (unitDirection.y() + 1.0f);
 	return (1.0f - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
 }
 

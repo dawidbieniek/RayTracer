@@ -11,7 +11,7 @@ public:
     __device__ vec3 origin() const { return _origin; }
     __device__ vec3 direction() const { return _dir; }
     // Returns point reached by ray of length t
-    __device__ vec3 point_at_parameter(float t) const { return _origin + t * _dir; }
+    __device__ vec3 at(float t) const { return _origin + t * _dir; }
 
 private:
     vec3 _origin;
