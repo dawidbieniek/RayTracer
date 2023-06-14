@@ -81,12 +81,11 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="cudaHelpers.h" />
-  </ItemGroup>
-  <ItemGroup>
     <CudaCompile Include="main.cu" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="camera.h" />
+    <ClInclude Include="doubleUtils.h" />
     <ClInclude Include="ray.h" />
     <ClInclude Include="rayHittable.h" />
     <ClInclude Include="scene.h" />

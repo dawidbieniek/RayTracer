@@ -8,10 +8,12 @@
 // CUDA libs
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
+#include "curand_kernel.h"
 
 // My libs
-//#include "cudaHelpers.h"
-// TMP
+// Wrapper define
+#define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
+
 void check_cuda(cudaError_t result, char const* const func, const char* const file, int const line)
 {
 	if (result)
@@ -24,33 +26,21 @@ void check_cuda(cudaError_t result, char const* const func, const char* const fi
 	}
 }
 
-// Wrapper define
-#define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
-// !TMP
-
 #include "vec3.h"
 #include "ray.h"
 #include "scene.h"
 #include "rayHittable.h"
 #include "sphere.h"
+#include "doubleUtils.h"
 
 static const int TARGET_FPS = 60;
 static const unsigned int FPS_DISPLAY_REFRESH_TIME = 500;
+static const int SAMPLES_PER_PIXEL = 10;
 
 const int screenWidth = 960;
 const int screenHeight = 480;
 
 #define ASPECT_RATIO (float)screenWidth / screenHeight
-
-__global__ void createScene(rayHittable** dObjects, scene** dScene)
-{
-	if (threadIdx.x == 0 && blockIdx.x == 0)
-	{
-		*(dObjects) = new sphere(vec3(0, 0, -2), 0.5);
-		*(dObjects + 1) = new sphere(vec3(-2, -1, -5), 1);
-		*dScene = new scene(dObjects, 2);
-	}
-}
 
 // Returns length of ray from origin to hit point. -1 if not hit
 __device__ double sphereHitPoint(const vec3& center, float radius, const ray& r)
@@ -78,18 +68,48 @@ __device__ vec3 color(const ray& r, scene** dScene)
 	return (1.0 - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
 }
 
-__global__ void render(vec3* fb, int maxX, int maxY, vec3 lowerLeftCorner, vec3 horizontal, vec3 vertical, vec3 origin, scene** dScene)
+__global__ void setupRNG(curandState* globalState, int seed, int screenWidth)
+{
+	int i = threadIdx.x + blockIdx.x * blockDim.x;
+	int j = threadIdx.y + blockIdx.y * blockDim.y;
+
+	int id = j * screenWidth + i;
+	curand_init(seed, id, 0, &globalState[id]);
+}
+
+__global__ void createScene(rayHittable** dObjects, scene** dScene)
+{
+	if (threadIdx.x == 0 && blockIdx.x == 0)
+	{
+		*(dObjects) = new sphere(vec3(0, 0, -2), 0.5);
+		*(dObjects + 1) = new sphere(vec3(-2, -1, -5), 1);
+		*dScene = new scene(dObjects, 2);
+	}
+}
+
+__global__ void render(vec3* fb, int maxX, int maxY, vec3 lowerLeftCorner, vec3 horizontal, vec3 vertical, vec3 origin, scene** dScene, curandState* globalState)
 {
 	int i = threadIdx.x + blockIdx.x * blockDim.x;
 	int j = threadIdx.y + blockIdx.y * blockDim.y;
 
 	if ((i >= maxX) || (j >= maxY)) return;
 
+	//int pixelIndex = j * maxX + i;
+	//float u = float(i) / float(maxX);
+	//float v = float(j) / float(maxY);
+	//ray r(origin, lowerLeftCorner + u * horizontal + v * vertical);
+	//fb[pixelIndex] = color(r, dScene);
+
 	int pixelIndex = j * maxX + i;
-	float u = float(i) / float(maxX);
-	float v = float(j) / float(maxY);
-	ray r(origin, lowerLeftCorner + u * horizontal + v * vertical);
-	fb[pixelIndex] = color(r, dScene);
+	curandState localState = globalState[pixelIndex];
+	for (int p = 0; p < SAMPLES_PER_PIXEL; p++)	// TODO: Maybe divide this across threads
+	{
+		float u = (float(i) + curand_uniform(&localState)) / float(maxX);
+		float v = (float(j) + curand_uniform(&localState)) / float(maxY);
+		ray r(origin, lowerLeftCorner + u * horizontal + v * vertical);
+		fb[pixelIndex] += color(r, dScene);
+	}
+	fb[pixelIndex] /= SAMPLES_PER_PIXEL;
 }
 
 vec3* fb;
@@ -192,10 +212,7 @@ void initGL(int argc, char **args)
 
 int main(int argc, char** args)
 {
-	int numPixels = screenWidth * screenHeight;
-	size_t fbSize = numPixels * sizeof(vec3);
-	checkCudaErrors(cudaMallocManaged(&fb, fbSize));
-
+	// Create scene
 	rayHittable** dObjects;
 	checkCudaErrors(cudaMallocManaged((void**)&dObjects, 2 * sizeof(rayHittable*)));
 	scene** dScene;
@@ -205,6 +222,12 @@ int main(int argc, char** args)
 	checkCudaErrors(cudaGetLastError());
 	checkCudaErrors(cudaDeviceSynchronize());
 
+	// Setup render kernel
+	int numPixels = screenWidth * screenHeight;
+	size_t fbSize = numPixels * sizeof(vec3);
+	checkCudaErrors(cudaMallocManaged(&fb, fbSize));
+
+
 	int tx = 8;
 	int ty = 8;
 	dim3 blocks(screenWidth / tx + 1, screenHeight / ty + 1);
@@ -212,7 +235,13 @@ int main(int argc, char** args)
 
 	initGL(argc, args);
 
-	render <<<blocks, threads >>> (fb, screenWidth, screenHeight, vec3(-2.0, -1.0, -1.0), vec3(2 * ASPECT_RATIO, 0.0, 0.0), vec3(0.0, 2.0, 0.0), vec3(0.0, 0.0, 0.0), dScene);
+	curandState* globalState;
+	checkCudaErrors(cudaMallocManaged(&globalState, numPixels * sizeof(curandState)));
+	setupRNG << <blocks, threads >> > (globalState, time(NULL), screenWidth);
+	checkCudaErrors(cudaGetLastError());
+	checkCudaErrors(cudaDeviceSynchronize());
+
+	render <<<blocks, threads >>> (fb, screenWidth, screenHeight, vec3(-2.0, -1.0, -1.0), vec3(2 * ASPECT_RATIO, 0.0, 0.0), vec3(0.0, 2.0, 0.0), vec3(0.0, 0.0, 0.0), dScene, globalState);
 	checkCudaErrors(cudaGetLastError());
 	checkCudaErrors(cudaDeviceSynchronize());
 
