@@ -3,18 +3,14 @@
 
 #include "ray.h"
 
+class material;	// To avoid include cycles
+
 struct hitInfo
 {
 	vec3 point;
 	vec3 normal;
 	double t;
-	bool frontFace;
-
-	__device__ void setFaceNormal(const ray& r, const vec3& outNormal)
-	{
-		frontFace = dot(r.direction(), outNormal) < 0;
-		normal = frontFace ? outNormal : -outNormal;
-	}
+	material* matPtr;
 };
 
 class rayHittable

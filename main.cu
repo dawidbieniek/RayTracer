@@ -37,14 +37,19 @@ void check_cuda(cudaError_t result, char const* const func, const char* const fi
 #include "sphere.h"
 #include "doubleUtils.h"
 #include "camera.h"
+#include "material.h"
 
 #define USE_GAMMA_CORRECTION
-//#define DIFFUSE_HALF_SPHERE
+#define DIFFUSE_HALF_SPHERE
 
 static const int TARGET_FPS = 60;
 static const unsigned int FPS_DISPLAY_REFRESH_TIME = 500;
 static const int SAMPLES_PER_PIXEL = 100;
 static const int MAX_DIFFUSE_DEPTH = 20;
+static const int SCENE_ELEMENTS = 5;
+
+#define BACKGROUND_START_GRADIENT_COLOR vec3(0.5, 0.7, 1.0)
+#define BACKGROUND_END_GRADIENT_COLOR vec3(1.0, 1.0, 1.0)
 
 const int screenWidth = 960;
 const int screenHeight = 480;
@@ -67,7 +72,7 @@ __device__ double sphereHitPoint(const vec3& center, float radius, const ray& r)
 __device__ vec3 color(const ray& r, scene** dScene, curandState localState)
 {
 	ray currentRay = r;
-	float currentAttenuation = 1.0f;
+	vec3 currentAttenuation = vec3(1.0, 1.0, 1.0);
 
 	// NOTE: Recursion blows up GPU stack, so instead I use iterative recursion
 	for (int i = 0; i < MAX_DIFFUSE_DEPTH; i++) 
@@ -75,19 +80,23 @@ __device__ vec3 color(const ray& r, scene** dScene, curandState localState)
 		hitInfo hit;
 		if ((*dScene)->hit(currentRay, 0.001f, INFINITY, hit)) 
 		{
-#ifndef DIFFUSE_HALF_SPHERE
-			vec3 target = hit.point + hit.normal + randomVecInSphere(localState);
-#else
-			vec3 target = hit.point + hit.normal + randomVecInHalfSphere(hit.normal, localState);
-#endif
-			currentAttenuation *= 0.5f;
-			currentRay = ray(hit.point, target - hit.point);
+			ray scattered;
+			vec3 attenuation;
+			if (hit.matPtr->scatter(currentRay, hit, attenuation, scattered, localState)) 
+			{
+				currentAttenuation *= attenuation;
+				currentRay = scattered;
+			}
+			else 
+			{
+				return vec3(0.0, 0.0, 0.0);
+			}
 		}
 		else 
 		{
 			vec3 unit_direction = unit_vector(currentRay.direction());
 			float t = 0.5f * (unit_direction.y() + 1.0f);
-			vec3 c = (1.0f - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
+			vec3 c = (1.0f - t) * BACKGROUND_END_GRADIENT_COLOR + t * BACKGROUND_START_GRADIENT_COLOR;
 			return currentAttenuation * c;
 		}
 	}
@@ -116,10 +125,12 @@ __global__ void createScene(rayHittable** dObjects, scene** dScene)
 {
 	if (threadIdx.x == 0 && blockIdx.x == 0)
 	{
-		*(dObjects) = new sphere(vec3(0, 0, -2), 0.5);
-		*(dObjects + 1) = new sphere(vec3(-2, -1, -5), 1);
-		*(dObjects + 2) = new sphere(vec3(0, -100.5, -1), 100);
-		*dScene = new scene(dObjects, 3);
+		*(dObjects) = new sphere(vec3(0, 0, -2), 0.5, new lambertian(vec3(0.8, 0.2, 0.2)));
+		*(dObjects + 1) = new sphere(vec3(-2, -1, -5), 1, new lambertian(vec3(0.0, 0.8, 0.8)));
+		*(dObjects + 2) = new sphere(vec3(0, -100.5, -1), 100, new lambertian(vec3(0.0, 0.8, 0.0)));
+		*(dObjects + 3) = new sphere(vec3(1.5, 0.5, -2), 0.5, new lambertian(vec3(1, 1, 1)));
+		*(dObjects + 4) = new sphere(vec3(-1.5, 0.5, -2), 0.5, new lambertian(vec3(0, 0, 0)));
+		*dScene = new scene(dObjects, SCENE_ELEMENTS);
 	}
 }
 
@@ -250,7 +261,7 @@ int main(int argc, char** args)
 {
 	// Create scene
 	rayHittable** dObjects;
-	checkCudaErrors(cudaMallocManaged((void**)&dObjects, 3 * sizeof(rayHittable*)));
+	checkCudaErrors(cudaMallocManaged((void**)&dObjects, SCENE_ELEMENTS * sizeof(rayHittable*)));
 	scene** dScene;
 	checkCudaErrors(cudaMallocManaged((void**)&dScene, sizeof(scene)));
 

@@ -86,6 +86,7 @@
   <ItemGroup>
     <ClInclude Include="camera.h" />
     <ClInclude Include="doubleUtils.h" />
+    <ClInclude Include="material.h" />
     <ClInclude Include="ray.h" />
     <ClInclude Include="rayHittable.h" />
     <ClInclude Include="scene.h" />
