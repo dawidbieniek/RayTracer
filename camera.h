@@ -8,6 +8,8 @@
 class camera 
 {
 public:
+    __device__ __host__ camera() {};
+
     __device__ __host__ camera(float width, float height) 
     {
         float aspectRatio = width / height;

@@ -32,6 +32,7 @@ void check_cuda(cudaError_t result, char const* const func, const char* const fi
 #include "rayHittable.h"
 #include "sphere.h"
 #include "doubleUtils.h"
+#include "camera.h"
 
 static const int TARGET_FPS = 60;
 static const unsigned int FPS_DISPLAY_REFRESH_TIME = 500;
@@ -41,6 +42,8 @@ const int screenWidth = 960;
 const int screenHeight = 480;
 
 #define ASPECT_RATIO (float)screenWidth / screenHeight
+
+__device__ camera cam;
 
 // Returns length of ray from origin to hit point. -1 if not hit
 __device__ double sphereHitPoint(const vec3& center, float radius, const ray& r)
@@ -68,6 +71,14 @@ __device__ vec3 color(const ray& r, scene** dScene)
 	return (1.0 - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
 }
 
+__global__ void createCamera(int width, int height)
+{
+	if (threadIdx.x == 0 && blockIdx.x == 0)
+	{
+		cam = camera(width, height);
+	}
+}
+
 __global__ void setupRNG(curandState* globalState, int seed, int screenWidth)
 {
 	int i = threadIdx.x + blockIdx.x * blockDim.x;
@@ -87,7 +98,7 @@ __global__ void createScene(rayHittable** dObjects, scene** dScene)
 	}
 }
 
-__global__ void render(vec3* fb, int maxX, int maxY, vec3 lowerLeftCorner, vec3 horizontal, vec3 vertical, vec3 origin, scene** dScene, curandState* globalState)
+__global__ void render(vec3* fb, int maxX, int maxY, scene** dScene, curandState* globalState)
 {
 	int i = threadIdx.x + blockIdx.x * blockDim.x;
 	int j = threadIdx.y + blockIdx.y * blockDim.y;
@@ -106,7 +117,7 @@ __global__ void render(vec3* fb, int maxX, int maxY, vec3 lowerLeftCorner, vec3 
 	{
 		float u = (float(i) + curand_uniform(&localState)) / float(maxX);
 		float v = (float(j) + curand_uniform(&localState)) / float(maxY);
-		ray r(origin, lowerLeftCorner + u * horizontal + v * vertical);
+		ray r = cam.getRay(u, v);
 		fb[pixelIndex] += color(r, dScene);
 	}
 	fb[pixelIndex] /= SAMPLES_PER_PIXEL;
@@ -221,27 +232,33 @@ int main(int argc, char** args)
 	createScene <<<1, 1>>> (dObjects, dScene);
 	checkCudaErrors(cudaGetLastError());
 	checkCudaErrors(cudaDeviceSynchronize());
-
-	// Setup render kernel
+	
+	// Create camera
+	createCamera << <1, 1 >> > (screenWidth, screenHeight);
+	checkCudaErrors(cudaGetLastError());
+	checkCudaErrors(cudaDeviceSynchronize());
+	// Init values for kernels
 	int numPixels = screenWidth * screenHeight;
 	size_t fbSize = numPixels * sizeof(vec3);
 	checkCudaErrors(cudaMallocManaged(&fb, fbSize));
-
 
 	int tx = 8;
 	int ty = 8;
 	dim3 blocks(screenWidth / tx + 1, screenHeight / ty + 1);
 	dim3 threads(tx, ty);
 
-	initGL(argc, args);
-
+	// Setup RNG
 	curandState* globalState;
 	checkCudaErrors(cudaMallocManaged(&globalState, numPixels * sizeof(curandState)));
 	setupRNG << <blocks, threads >> > (globalState, time(NULL), screenWidth);
 	checkCudaErrors(cudaGetLastError());
 	checkCudaErrors(cudaDeviceSynchronize());
 
-	render <<<blocks, threads >>> (fb, screenWidth, screenHeight, vec3(-2.0, -1.0, -1.0), vec3(2 * ASPECT_RATIO, 0.0, 0.0), vec3(0.0, 2.0, 0.0), vec3(0.0, 0.0, 0.0), dScene, globalState);
+	
+	// Setup render kernel
+	initGL(argc, args);
+
+	render <<<blocks, threads >>> (fb, screenWidth, screenHeight, dScene, globalState);
 	checkCudaErrors(cudaGetLastError());
 	checkCudaErrors(cudaDeviceSynchronize());
 
