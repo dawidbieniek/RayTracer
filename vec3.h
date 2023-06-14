@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <iostream>
 
+#include <curand_kernel.h>
 
 class vec3
 {
@@ -29,9 +30,15 @@ public:
 	__host__ __device__ inline vec3& operator*=(const float t);
 	__host__ __device__ inline vec3& operator/=(const float t);
 
+	__host__ __device__ void v3sqrt() { e[0] = sqrt(e[0]); e[1] = sqrt(e[1]); e[2] = sqrt(e[2]); }
+
 	__host__ __device__ inline float length() const { return sqrt(e[0] * e[0] + e[1] * e[1] + e[2] * e[2]); }
 	__host__ __device__ inline float lengthSquared() const { return e[0] * e[0] + e[1] * e[1] + e[2] * e[2]; }
 	__host__ __device__ inline void make_unit_vector();
+
+	__device__ static inline vec3 randomVecInCube(curandState localState);
+	__device__ static inline vec3 randomVecInSphere(curandState localState);
+	__device__ static inline vec3 randomVecInHalfSphere(const vec3 normal,  curandState localState);
 
 	float e[3];
 };
@@ -40,6 +47,25 @@ __host__ __device__ inline void vec3::make_unit_vector()
 {
 	float k = 1.0 / sqrt(e[0] * e[0] + e[1] * e[1] + e[2] * e[2]);
 	e[0] *= k; e[1] *= k; e[2] *= k;
+}
+
+__device__ static inline vec3 randomVecInCube(curandState localState)
+{
+	return vec3(curand_uniform(&localState), curand_uniform(&localState), curand_uniform(&localState));
+}
+
+__device__ static inline vec3 randomVecInSphere(curandState localState)
+{
+	vec3 cube = randomVecInCube(localState);
+	cube /= cube.length();
+	return cube;
+}
+
+__device__ static inline vec3 randomVecInHalfSphere(const vec3 normal, curandState localState)
+{
+	vec3 sphereVec = randomVecInSphere(localState);
+	
+	return dot(sphereVec, normal) > 0.0 ? sphereVec : -sphereVec;
 }
 
 __host__ __device__ inline vec3 operator+(const vec3& v1, const vec3& v2)
