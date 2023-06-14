@@ -43,7 +43,6 @@ void check_cuda(cudaError_t result, char const* const func, const char* const fi
 
 static const int SAMPLES_PER_PIXEL = 50;
 static const int MAX_SCATTER_DEPTH = 20;
-static const int SCENE_ELEMENTS = 8;
 
 #define BACKGROUND_START_GRADIENT_COLOR vec3(0.5, 0.7, 1.0)
 #define BACKGROUND_END_GRADIENT_COLOR vec3(1.0, 1.0, 1.0)
@@ -57,7 +56,10 @@ std::chrono::steady_clock::time_point start, end;
 
 scene** currentScene;
 scene** dSceneAll;
-rayHittable** dObjects;
+scene** dSceneDiffuse;
+scene** dSceneMetalic;
+scene** dSceneGlass;
+scene** dSceneBig;
 vec3* fb;
 curandState* globalState;
 
@@ -126,20 +128,72 @@ __global__ void setupRNG(curandState* globalState, int seed, int screenWidth)
 	curand_init(seed, id, 0, &globalState[id]);
 }
 
-__global__ void createSceneAll(rayHittable** dObjects, scene** dScene)
+__global__ void createScenes(scene** dSceneAll, scene** dSceneDiffuse, scene** dSceneMetalic, scene** dSceneGlass, scene** dSceneBig)
 {
 	if (threadIdx.x == 0 && blockIdx.x == 0)
 	{
-		*(dObjects) = new sphere(vec3(0, 0, -2), 0.5, new lambertian(vec3(0.8, 0.2, 0.2)));
-		*(dObjects + 1) = new sphere(vec3(-2, -1, -5), 1, new lambertian(vec3(0.0, 0.8, 0.8)));
-		*(dObjects + 2) = new sphere(vec3(0, -100.5, -1), 100, new lambertian(vec3(0.0, 0.8, 0.0)));
-		*(dObjects + 3) = new sphere(vec3(1.5, 0.5, -2), 0.5, new lambertian(vec3(1, 1, 1)));
-		*(dObjects + 4) = new sphere(vec3(-1.5, 0.5, -2), 0.5, new lambertian(vec3(0, 0, 0)));
-		*(dObjects + 5) = new sphere(vec3(1.5, 0, -3), 0.5, new metal(vec3(1, 1, 1), 1));
-		*(dObjects + 6) = new sphere(vec3(-2, 0, -2), 0.5, new metal(vec3(1, 0, 0), 0.5));
-		*(dObjects + 7) = new sphere(vec3(-0.5, 0, -1.5), 0.25, new dielectric(0.9));
-		*dScene = new scene(dObjects, SCENE_ELEMENTS);
+		// All scene
+		rayHittable** objects = (rayHittable**)malloc(8 * sizeof(rayHittable*));
+		*(objects) = new sphere(vec3(0, 0, -2), 0.5, new lambertian(vec3(0.8, 0.2, 0.2)));
+		*(objects + 1) = new sphere(vec3(-2, -1, -5), 1, new lambertian(vec3(0.0, 0.8, 0.8)));
+		*(objects + 2) = new sphere(vec3(0, -100.5, -1), 100, new lambertian(vec3(0.0, 0.8, 0.0)));
+		*(objects + 3) = new sphere(vec3(1.5, 0.5, -2), 0.5, new lambertian(vec3(1, 1, 1)));
+		*(objects + 4) = new sphere(vec3(-1.5, 0.5, -2), 0.5, new lambertian(vec3(0, 0, 0)));
+		*(objects + 5) = new sphere(vec3(1.5, 0, -3), 0.5, new metal(vec3(1, 1, 1), 1));
+		*(objects + 6) = new sphere(vec3(-2, 0, -2), 0.5, new metal(vec3(1, 0, 0), 0.5));
+		*(objects + 7) = new sphere(vec3(-0.5, 0, -1.5), 0.25, new dielectric(0.9));
+		*dSceneAll = new scene(objects, 8);
+
+		// Diffuse scene
+		objects = (rayHittable**)malloc(5 * sizeof(rayHittable*));
+		*(objects) = new sphere(vec3(0, 0, -1), 0.5, new lambertian(vec3(0.8, 0.2, 0.2)));
+		*(objects + 1) = new sphere(vec3(1, 0, -1), 0.5, new lambertian(vec3(0.0, 0.8, 0.8)));
+		*(objects + 2) = new sphere(vec3(0, -100.5, -1), 100, new lambertian(vec3(0.0, 0.8, 0.0)));
+		*(objects + 3) = new sphere(vec3(-1, 0, -1), 0.5, new lambertian(vec3(1, 1, 1)));
+		*(objects + 4) = new sphere(vec3(-2, 1, 0), 0.5, new lambertian(vec3(0, 0, 1)));
+		*dSceneDiffuse = new scene(objects, 5);
+
+		// Metalic scene
+		objects = (rayHittable**)malloc(5 * sizeof(rayHittable*));
+		*(objects) = new sphere(vec3(0, 0, -1), 0.5, new metal(vec3(1, 1, 1), 1));
+		*(objects + 1) = new sphere(vec3(1, 0, -1), 0.5, new metal(vec3(0.5, 0, 0.5), 0.5));
+		*(objects + 2) = new sphere(vec3(0, -100.5, -1), 100, new lambertian(vec3(0.0, 0.8, 0.0)));
+		*(objects + 3) = new sphere(vec3(-1, 0, -1), 0.5, new lambertian(vec3(1, 1, 1)));
+		*(objects + 4) = new sphere(vec3(-2, 1, 0), 0.5, new metal(vec3(1, 1, 1), 1));
+		*dSceneMetalic = new scene(objects, 5);
+
+		// Glass scene
+		objects = (rayHittable**)malloc(6 * sizeof(rayHittable*));
+		*(objects) = new sphere(vec3(0, 0, -1), 0.5, new dielectric(0.9));
+		*(objects + 1) = new sphere(vec3(1, 0, -1), 0.5, new dielectric(0.1));
+		*(objects + 2) = new sphere(vec3(0, -100.5, -1), 100, new lambertian(vec3(0.0, 0.8, 0.0)));
+		*(objects + 3) = new sphere(vec3(-1, 0, -1), 0.5, new lambertian(vec3(1, 1, 1)));
+		*(objects + 4) = new sphere(vec3(-2, 1, 0), 0.5, new dielectric(5));
+		*(objects + 5) = new sphere(vec3(0, 0, -3), 0.5, new lambertian(vec3(0, 0, 1)));
+		*dSceneGlass = new scene(objects, 6);
+
+		// Big scene
+		objects = (rayHittable**)malloc(300 * sizeof(rayHittable*));
+		for (int i = 0; i < 10; i++)
+		{
+			for (int j = 0; j < 10; j++)
+			{
+				*(objects + i * 10 + j) = new sphere(vec3((i-4)/2.0, (j - 5)/2.0, -4), 0.1, new lambertian(vec3(i / 5.0, j / 5.0, 0.5)));
+				*(objects + i * 10 + j + 100) = new sphere(vec3((i - 4) / 2.0+0.25, (j - 4) / 2.0, -5), 0.2, new metal(vec3((i+j)/100.0, 0.2, 0.5), (10-i + j)/100.0));
+				*(objects + i * 10 + j + 200) = new sphere(vec3((i - 4) / 2.0+0.25, (j - 4) +0.5, -6), 0.1, new lambertian(vec3(i / 5.0, j / 5.0, 0.5)));
+			}
+		}
+		*dSceneBig = new scene(objects, 300);
 	}
+}
+
+__global__ void clearFb(vec3* fb, int maxX)
+{
+	int i = threadIdx.x + blockIdx.x * blockDim.x;
+	int j = threadIdx.y + blockIdx.y * blockDim.y;
+
+	int pixelIndex = j * maxX + i;
+	fb[pixelIndex] = vec3(0.0, 0.0, 0.0);
 }
 
 __global__ void render(vec3* fb, int maxX, int maxY, scene** dScene, curandState* globalState)
@@ -148,7 +202,6 @@ __global__ void render(vec3* fb, int maxX, int maxY, scene** dScene, curandState
 	int j = threadIdx.y + blockIdx.y * blockDim.y;
 	
 	int pixelIndex = j * maxX + i;
-	//fb[pixelIndex] = vec3(0.0, 0.0, 0.0);
 
 	for (int p = 0; p < SAMPLES_PER_PIXEL; p++)	// TODO: Maybe divide this across threads
 	{
@@ -200,6 +253,7 @@ void cleanup()
 void rerender()
 {
 	start = std::chrono::high_resolution_clock::now();
+	clearFb << <blocks, threads >> > (fb, screenWidth);
 	render << <blocks, threads >> > (fb, screenWidth, screenHeight, currentScene, globalState);
 	checkCudaErrors(cudaGetLastError());
 	checkCudaErrors(cudaDeviceSynchronize());
@@ -260,6 +314,31 @@ void glutHandleKeyboard(unsigned char key, int x, int y)
 		std::cout << "Pressed F" << std::endl;
 		rerender();
 		break;
+	case '1':
+		currentScene = dSceneAll;
+		std::cout << "Changing to scene 1 (all)" << std::endl;
+		rerender();
+		break;
+	case '2':
+		currentScene = dSceneDiffuse;
+		std::cout << "Changing to scene 2 (diffuse)" << std::endl;
+		rerender();
+		break;
+	case '3':
+		currentScene = dSceneMetalic;
+		std::cout << "Changing to scene 3 (metal)" << std::endl;
+		rerender();
+		break;
+	case '4':
+		currentScene = dSceneGlass;
+		std::cout << "Changing to scene 4 (glass)" << std::endl;
+		rerender();
+		break;
+	case '5':
+		currentScene = dSceneBig;
+		std::cout << "Changing to scene 5 (big)" << std::endl;
+		rerender();
+		break;
 	}
 
 }
@@ -289,7 +368,6 @@ void writeStartInfo()
 	std::cout << "\tQuality info:" << std::endl
 		<< "\t\tSamples per pixel: " << SAMPLES_PER_PIXEL << std::endl
 		<< "\t\tScatter depth: " << MAX_SCATTER_DEPTH << std::endl
-		<< "\t\tScene elements: " << SCENE_ELEMENTS << std::endl
 		<< "\t\tGamma correction: " <<
 #ifdef DIFFUSE_HALF_SPHERE
 		"Yes"
@@ -318,8 +396,11 @@ int main(int argc, char** args)
 
 	// CUDA mallocs
 	start = std::chrono::high_resolution_clock::now();
-	checkCudaErrors(cudaMallocManaged((void**)&dObjects, SCENE_ELEMENTS * sizeof(rayHittable*)));
 	checkCudaErrors(cudaMallocManaged((void**)&dSceneAll, sizeof(scene)));
+	checkCudaErrors(cudaMallocManaged((void**)&dSceneDiffuse, sizeof(scene)));
+	checkCudaErrors(cudaMallocManaged((void**)&dSceneMetalic, sizeof(scene)));
+	checkCudaErrors(cudaMallocManaged((void**)&dSceneGlass, sizeof(scene)));
+	checkCudaErrors(cudaMallocManaged((void**)&dSceneBig, sizeof(scene)));
 	checkCudaErrors(cudaMallocManaged(&fb, numPixels * sizeof(vec3)));
 	checkCudaErrors(cudaMallocManaged(&globalState, numPixels * sizeof(curandState)));
 	end = std::chrono::high_resolution_clock::now();
@@ -327,14 +408,12 @@ int main(int argc, char** args)
 
 	// Create scene kernel
 	start = std::chrono::high_resolution_clock::now();
-	createSceneAll <<<1, 1>>> (dObjects, dSceneAll);
+	createScenes <<<1, 1>>> (dSceneAll, dSceneDiffuse, dSceneMetalic, dSceneGlass, dSceneBig);
 	checkCudaErrors(cudaGetLastError());
 	checkCudaErrors(cudaDeviceSynchronize());
 	end = std::chrono::high_resolution_clock::now();
 	std::cout << "Create scene kernel time:\t\t" << (end - start) / std::chrono::milliseconds(1) << "\tms" << std::endl;
 	
-	currentScene = dSceneAll;
-
 	// Create camera kernel
 	start = std::chrono::high_resolution_clock::now();
 	createCamera << <1, 1 >> > (screenWidth, screenHeight);
@@ -352,6 +431,8 @@ int main(int argc, char** args)
 	std::cout << "RNG states init kernel time:\t\t" << (end - start) / std::chrono::milliseconds(1) << "\tms" << std::endl;
 
 	// Render kernel
+	currentScene = dSceneDiffuse;
+	std::cout << "Changing to scene 2 (diffuse)" << std::endl;
 	rerender();
 
 	glutMainLoop();

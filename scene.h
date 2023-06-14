@@ -12,7 +12,6 @@ public:
 
 	__device__ virtual bool hit(const ray& r, double tMin, double tMax, hitInfo& info) const override;
 
-private:
 	rayHittable** objectList;
 	int objectCount;
 };
