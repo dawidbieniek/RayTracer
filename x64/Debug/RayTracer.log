@@ -1,15 +1,15 @@
 ﻿  Compiling CUDA source file main.cu...
   
-  D:\Projekty\RayTracer>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\bin\nvcc.exe" -gencode=arch=compute_52,code=\"sm_52,compute_52\" --use-local-env -ccbin "E:\VisualStudio\2022\Preview\VC\Tools\MSVC\14.37.32705\bin\HostX64\x64" -x cu   -ID:\Projekty\RayTracer\packages\nupengl.core.0.1.0.1\build\native\../..//build/native/include/ -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include"  -G   --keep-dir x64\Debug  -maxrregcount=0   --machine 64 --compile -cudart static  -g  -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /FS /Zi /RTC1 /MDd " -Xcompiler "/Fdx64\Debug\vc143.pdb" -o D:\Projekty\RayTracer\x64\Debug\main.cu.obj "D:\Projekty\RayTracer\main.cu" 
+  D:\Projekty\RayTracer>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\bin\nvcc.exe" -gencode=arch=compute_52,code=\"sm_52,compute_52\" --use-local-env -ccbin "E:\VisualStudio\2022\Preview\VC\Tools\MSVC\14.37.32705\bin\HostX64\x64" -x cu   -ID:\Projekty\RayTracer\packages\nupengl.core.0.1.0.1\build\native\../..//build/native/include/ -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include"  -G   --keep-dir x64\Debug  -maxrregcount=0   --machine 64 --compile -cudart static  -g  -DDIFFUSE_HALF_SPHERE -DUSE_GAMMA_CORRECTION -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /FS /Zi /RTC1 /MDd " -Xcompiler "/Fdx64\Debug\vc143.pdb" -o D:\Projekty\RayTracer\x64\Debug\main.cu.obj "D:\Projekty\RayTracer\main.cu" 
 CUDACOMPILE : ptxas warning : Stack size for entry function '_Z6renderP4vec3iiPP5sceneP17curandStateXORWOW' cannot be statically determined
   main.cu
-  tmpxft_0000067c_00000000-7_main.cudafe1.cpp
-D:\Projekty\RayTracer\vec3.h(66): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-D:\Projekty\RayTracer\vec3.h(161): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-D:\Projekty\RayTracer\main.cu(199): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
-D:\Projekty\RayTracer\main.cu(223): warning C4244: 'argument': conversion from 'int' to 'GLfloat', possible loss of data
-D:\Projekty\RayTracer\main.cu(223): warning C4244: 'argument': conversion from 'int' to 'GLfloat', possible loss of data
-D:\Projekty\RayTracer\main.cu(289): warning C4244: 'argument': conversion from 'time_t' to 'int', possible loss of data
+  tmpxft_00004a5c_00000000-7_main.cudafe1.cpp
+D:\Projekty\RayTracer\vec3.h(62): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+D:\Projekty\RayTracer\vec3.h(158): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+D:\Projekty\RayTracer\main.cu(198): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+D:\Projekty\RayTracer\main.cu(222): warning C4244: 'argument': conversion from 'int' to 'GLfloat', possible loss of data
+D:\Projekty\RayTracer\main.cu(222): warning C4244: 'argument': conversion from 'int' to 'GLfloat', possible loss of data
+D:\Projekty\RayTracer\main.cu(288): warning C4244: 'argument': conversion from 'time_t' to 'int', possible loss of data
      Creating library D:\Projekty\RayTracer\x64\Debug\RayTracer.lib and object D:\Projekty\RayTracer\x64\Debug\RayTracer.exp
 LINK : warning LNK4098: defaultlib 'LIBCMT' conflicts with use of other libs; use /NODEFAULTLIB:library
   RayTracer.vcxproj -> D:\Projekty\RayTracer\x64\Debug\RayTracer.exe

@@ -39,14 +39,11 @@ void check_cuda(cudaError_t result, char const* const func, const char* const fi
 #include "camera.h"
 #include "material.h"
 
-#define USE_GAMMA_CORRECTION
-#define DIFFUSE_HALF_SPHERE
-
 static const int TARGET_FPS = 60;
 static const unsigned int FPS_DISPLAY_REFRESH_TIME = 500;
-static const int SAMPLES_PER_PIXEL = 100;
+static const int SAMPLES_PER_PIXEL = 50;
 static const int MAX_DIFFUSE_DEPTH = 20;
-static const int SCENE_ELEMENTS = 5;
+static const int SCENE_ELEMENTS = 7;
 
 #define BACKGROUND_START_GRADIENT_COLOR vec3(0.5, 0.7, 1.0)
 #define BACKGROUND_END_GRADIENT_COLOR vec3(1.0, 1.0, 1.0)
@@ -130,6 +127,8 @@ __global__ void createScene(rayHittable** dObjects, scene** dScene)
 		*(dObjects + 2) = new sphere(vec3(0, -100.5, -1), 100, new lambertian(vec3(0.0, 0.8, 0.0)));
 		*(dObjects + 3) = new sphere(vec3(1.5, 0.5, -2), 0.5, new lambertian(vec3(1, 1, 1)));
 		*(dObjects + 4) = new sphere(vec3(-1.5, 0.5, -2), 0.5, new lambertian(vec3(0, 0, 0)));
+		*(dObjects + 5) = new sphere(vec3(1.5, 0, -3), 0.5, new metal(vec3(1, 1, 1), 1));
+		*(dObjects + 6) = new sphere(vec3(-2, 0, -2), 0.5, new metal(vec3(1, 0, 0), 0.5));
 		*dScene = new scene(dObjects, SCENE_ELEMENTS);
 	}
 }

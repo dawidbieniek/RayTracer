@@ -38,11 +38,7 @@ public:
 	__host__ __device__ inline float length() const { return sqrt(e[0] * e[0] + e[1] * e[1] + e[2] * e[2]); }
 	__host__ __device__ inline float lengthSquared() const { return e[0] * e[0] + e[1] * e[1] + e[2] * e[2]; }
 	__host__ __device__ inline void make_unit_vector();
-
-	__device__ static inline vec3 randomVecInCube(curandState localState);
-	__device__ static inline vec3 randomVecInSphere(curandState localState);
-	__device__ static inline vec3 randomVecInHalfSphere(const vec3 normal,  curandState localState);
-
+	
 	float e[3];
 };
 
@@ -81,9 +77,10 @@ __device__ static inline vec3 randomVecInSphere(curandState localState)
 
 __device__ static inline vec3 randomVecInHalfSphere(const vec3 normal, curandState localState)
 {
-	vec3 sphereVec = randomVecInSphere(localState);
-	
-	return dot(sphereVec, normal) > 0.0 ? sphereVec : -sphereVec;
+	vec3 cube = randomVecInCube(localState);
+	cube /= cube.length();
+
+	return dot(cube, normal) > 0.0 ? cube : -cube;
 }
 
 __host__ __device__ inline vec3 operator+(const vec3& v1, const vec3& v2)
