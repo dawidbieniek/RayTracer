@@ -43,7 +43,7 @@ static const int TARGET_FPS = 60;
 static const unsigned int FPS_DISPLAY_REFRESH_TIME = 500;
 static const int SAMPLES_PER_PIXEL = 50;
 static const int MAX_DIFFUSE_DEPTH = 20;
-static const int SCENE_ELEMENTS = 7;
+static const int SCENE_ELEMENTS = 8;
 
 #define BACKGROUND_START_GRADIENT_COLOR vec3(0.5, 0.7, 1.0)
 #define BACKGROUND_END_GRADIENT_COLOR vec3(1.0, 1.0, 1.0)
@@ -129,6 +129,7 @@ __global__ void createScene(rayHittable** dObjects, scene** dScene)
 		*(dObjects + 4) = new sphere(vec3(-1.5, 0.5, -2), 0.5, new lambertian(vec3(0, 0, 0)));
 		*(dObjects + 5) = new sphere(vec3(1.5, 0, -3), 0.5, new metal(vec3(1, 1, 1), 1));
 		*(dObjects + 6) = new sphere(vec3(-2, 0, -2), 0.5, new metal(vec3(1, 0, 0), 0.5));
+		*(dObjects + 7) = new sphere(vec3(-0.5, 0, -1.5), 0.25, new dielectric(0.9));
 		*dScene = new scene(dObjects, SCENE_ELEMENTS);
 	}
 }

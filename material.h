@@ -9,6 +9,26 @@ __device__ vec3 reflect(const vec3& v, const vec3& n)
 {
     return v - 2.0f * dot(v, n) * n;
 }
+__device__ bool refract(const vec3& v, const vec3& n, float ni_nt, vec3& refracted) 
+{
+    vec3 uv = unit_vector(v);
+    float dt = dot(uv, n);
+    float discriminant = 1.0f - ni_nt * ni_nt * (1 - dt * dt);
+    if (discriminant > 0) 
+    {
+        refracted = ni_nt * (uv - n * dt) - n * sqrt(discriminant);
+        return true;
+    }
+    else
+        return false;
+}
+
+__device__ float schlick(float cosine, float refractionIndex) 
+{
+    float r0 = (1.0f - refractionIndex) / (1.0f + refractionIndex);
+    r0 = r0 * r0;
+    return r0 + (1.0f - r0) * pow((1.0f - cosine), 5.0f);
+}
 
 class material 
 {
@@ -50,9 +70,52 @@ public:
         attenuation = albedo;
         return (dot(scattered.direction(), hit.normal) > 0.0f);
     }
+
     vec3 albedo;
     float fuzz;
 };
+
+class dielectric : public material
+{
+public:
+    __device__ dielectric(float ri) : refractionIndex(ri) {}
+    __device__ virtual bool scatter(const ray& inputRay, const hitInfo& hit, vec3& attenuation, ray& scattered, curandState localState) const 
+    {
+        vec3 outward_normal;
+        vec3 reflected = reflect(inputRay.direction(), hit.normal);
+        float ni_nt;
+        attenuation = vec3(1.0, 1.0, 1.0);
+        vec3 refracted;
+        float reflectProbe;
+        float cosine;
+
+        if (dot(inputRay.direction(), hit.normal) > 0.0f)
+        {
+            outward_normal = -hit.normal;
+            ni_nt = refractionIndex;
+            cosine = dot(inputRay.direction(), hit.normal) / inputRay.direction().length();
+            cosine = sqrt(1.0f - refractionIndex * refractionIndex * (1 - cosine * cosine));
+        }
+        else
+        {
+            outward_normal = hit.normal;
+            ni_nt = 1.0f / refractionIndex;
+            cosine = -dot(inputRay.direction(), hit.normal) / inputRay.direction().length();
+        }
+        if (refract(inputRay.direction(), outward_normal, ni_nt, refracted))
+            reflectProbe = schlick(cosine, refractionIndex);
+        else
+            reflectProbe = 1.0f;
+        if (curand_uniform(&localState) < reflectProbe)
+            scattered = ray(hit.point, reflected);
+        else
+            scattered = ray(hit.point, refracted);
+        return true;
+    }
+
+    float refractionIndex;
+};
+
 
 
 #endif // MATERIAL_H
