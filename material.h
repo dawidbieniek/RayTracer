@@ -5,11 +5,11 @@
 #include "vec3.h"
 #include "rayHittable.h"
 
-__device__ vec3 reflect(const vec3& v, const vec3& n) 
+__device__ inline vec3 reflect(const vec3& v, const vec3& n) 
 {
     return v - 2.0f * dot(v, n) * n;
 }
-__device__ bool refract(const vec3& v, const vec3& n, float ni_nt, vec3& refracted) 
+__device__ inline bool refract(const vec3& v, const vec3& n, float ni_nt, vec3& refracted) 
 {
     vec3 uv = unit_vector(v);
     float dt = dot(uv, n);
@@ -23,7 +23,7 @@ __device__ bool refract(const vec3& v, const vec3& n, float ni_nt, vec3& refract
         return false;
 }
 
-__device__ float schlick(float cosine, float refractionIndex) 
+__device__ inline float schlick(float cosine, float refractionIndex) 
 {
     float r0 = (1.0f - refractionIndex) / (1.0f + refractionIndex);
     r0 = r0 * r0;
@@ -33,14 +33,14 @@ __device__ float schlick(float cosine, float refractionIndex)
 class material 
 {
 public:
-    __device__ virtual bool scatter(const ray& inputRay, const hitInfo& hit, vec3& attenuation, ray& scattered, curandState localState) const = 0;
+    __device__ inline virtual bool scatter(const ray& inputRay, const hitInfo& hit, vec3& attenuation, ray& scattered, curandState localState) const = 0;
 };
 
 class lambertian : public material 
 {
 public:
     __device__ lambertian(const vec3& a) : albedo(a) {}
-    __device__ virtual bool scatter(const ray& inputRay, const hitInfo& hit, vec3& attenuation, ray& scattered, curandState localState) const
+    __device__ inline virtual bool scatter(const ray& inputRay, const hitInfo& hit, vec3& attenuation, ray& scattered, curandState localState) const
     {
 #ifndef DIFFUSE_HALF_SPHERE
         vec3 target = hit.point + hit.normal + randomVecInSphere(localState);
@@ -59,7 +59,7 @@ class metal : public material
 {
 public:
     __device__ metal(const vec3& a, float f) : albedo(a) { if (f < 1) fuzz = f; else fuzz = 1; }
-    __device__ virtual bool scatter(const ray& inputRay, const hitInfo& hit, vec3& attenuation, ray& scattered, curandState localState) const 
+    __device__ inline bool scatter(const ray& inputRay, const hitInfo& hit, vec3& attenuation, ray& scattered, curandState localState) const
     {
         vec3 reflected = reflect(unit_vector(inputRay.direction()), hit.normal);
 #ifndef DIFFUSE_HALF_SPHERE
@@ -79,7 +79,7 @@ class dielectric : public material
 {
 public:
     __device__ dielectric(float ri) : refractionIndex(ri) {}
-    __device__ virtual bool scatter(const ray& inputRay, const hitInfo& hit, vec3& attenuation, ray& scattered, curandState localState) const 
+    __device__ inline bool scatter(const ray& inputRay, const hitInfo& hit, vec3& attenuation, ray& scattered, curandState localState) const
     {
         vec3 outward_normal;
         vec3 reflected = reflect(inputRay.direction(), hit.normal);

@@ -30,6 +30,8 @@ void check_cuda(cudaError_t result, char const* const func, const char* const fi
 	}
 }
 
+#include "fpsCounter.h"
+
 #include "vec3.h"
 #include "ray.h"
 #include "scene.h"
@@ -39,10 +41,8 @@ void check_cuda(cudaError_t result, char const* const func, const char* const fi
 #include "camera.h"
 #include "material.h"
 
-static const int TARGET_FPS = 60;
-static const unsigned int FPS_DISPLAY_REFRESH_TIME = 500;
 static const int SAMPLES_PER_PIXEL = 50;
-static const int MAX_DIFFUSE_DEPTH = 20;
+static const int MAX_SCATTER_DEPTH = 20;
 static const int SCENE_ELEMENTS = 8;
 
 #define BACKGROUND_START_GRADIENT_COLOR vec3(0.5, 0.7, 1.0)
@@ -53,18 +53,18 @@ const int screenHeight = 480;
 
 __device__ camera dCam;
 
-// Returns length of ray from origin to hit point. -1 if not hit
-__device__ double sphereHitPoint(const vec3& center, float radius, const ray& r)
-{
-	vec3 oc = r.origin() - center;
-	auto a = r.direction().lengthSquared();
-	auto half_b = dot(oc, r.direction());
-	auto c = oc.lengthSquared() - radius * radius;
-	auto discriminant = half_b * half_b - a * c;
+std::chrono::steady_clock::time_point start, end;
 
-	if (discriminant < 0) return -1.0;
-	return (-half_b - sqrt(discriminant)) / a;
-}
+scene** currentScene;
+scene** dSceneAll;
+rayHittable** dObjects;
+vec3* fb;
+curandState* globalState;
+
+int tx = 8;
+int ty = 8;
+dim3 blocks(screenWidth / tx + 1, screenHeight / ty + 1);
+dim3 threads(tx, ty);
 
 __device__ vec3 color(const ray& r, scene** dScene, curandState localState)
 {
@@ -72,10 +72,10 @@ __device__ vec3 color(const ray& r, scene** dScene, curandState localState)
 	vec3 currentAttenuation = vec3(1.0, 1.0, 1.0);
 
 	// NOTE: Recursion blows up GPU stack, so instead I use iterative recursion
-	for (int i = 0; i < MAX_DIFFUSE_DEPTH; i++) 
+	for (int i = 0; i < MAX_SCATTER_DEPTH; i++) 
 	{
 		hitInfo hit;
-		if ((*dScene)->hit(currentRay, 0.001f, INFINITY, hit)) 
+		if ((*dScene)->hit(currentRay, 0.001f, 1000, hit)) 
 		{
 			ray scattered;
 			vec3 attenuation;
@@ -109,6 +109,14 @@ __global__ void createCamera(int width, int height)
 	}
 }
 
+__global__ void updateCameraPosition(vec3 translation)
+{
+	if (threadIdx.x == 0 && blockIdx.x == 0)
+	{
+		dCam.updatePosition(translation);
+	}
+}
+
 __global__ void setupRNG(curandState* globalState, int seed, int screenWidth)
 {
 	int i = threadIdx.x + blockIdx.x * blockDim.x;
@@ -118,7 +126,7 @@ __global__ void setupRNG(curandState* globalState, int seed, int screenWidth)
 	curand_init(seed, id, 0, &globalState[id]);
 }
 
-__global__ void createScene(rayHittable** dObjects, scene** dScene)
+__global__ void createSceneAll(rayHittable** dObjects, scene** dScene)
 {
 	if (threadIdx.x == 0 && blockIdx.x == 0)
 	{
@@ -138,73 +146,24 @@ __global__ void render(vec3* fb, int maxX, int maxY, scene** dScene, curandState
 {
 	int i = threadIdx.x + blockIdx.x * blockDim.x;
 	int j = threadIdx.y + blockIdx.y * blockDim.y;
-
-	if ((i >= maxX) || (j >= maxY)) return;
 	
 	int pixelIndex = j * maxX + i;
-	curandState localState = globalState[pixelIndex];
+	//fb[pixelIndex] = vec3(0.0, 0.0, 0.0);
+
 	for (int p = 0; p < SAMPLES_PER_PIXEL; p++)	// TODO: Maybe divide this across threads
 	{
-		float u = (float(i) + curand_uniform(&localState)) / float(maxX);
-		float v = (float(j) + curand_uniform(&localState)) / float(maxY);
+		float u = (float(i) + curand_uniform(&globalState[pixelIndex])) / float(maxX);
+		float v = (float(j) + curand_uniform(&globalState[pixelIndex])) / float(maxY);
 		ray r = dCam.getRay(u, v);
 #ifndef USE_GAMMA_CORRECTION
-		fb[pixelIndex] += color(r, dScene, localState);
+		fb[pixelIndex] += color(r, dScene, globalState[pixelIndex]);
 #else
-		vec3 clr = color(r, dScene, localState);
+		vec3 clr = color(r, dScene, globalState[pixelIndex]);
 		clr.v3sqrt();
 		fb[pixelIndex] += clr;
 #endif
 	}
 	fb[pixelIndex] /= SAMPLES_PER_PIXEL;
-}
-
-vec3* fb;
-
-int lastFrameTime = 0;
-int deltaTimes[TARGET_FPS];
-int deltaTimesIndex = 0;
-
-void refreshFrameCallback(int value)
-{
-	if (glutGetWindow()) 
-	{
-		int currentTime = glutGet(GLUT_ELAPSED_TIME);
-		int deltaTime = currentTime - lastFrameTime;
-		lastFrameTime = currentTime;
-		deltaTimes[deltaTimesIndex++] = deltaTime;
-		if (deltaTimesIndex >= TARGET_FPS)
-			deltaTimesIndex = 0;
-
-		// Refresh window
-		glutPostRedisplay();
-		// Refresh callback
-		glutTimerFunc((unsigned int)(1000.0 / TARGET_FPS), refreshFrameCallback, NULL);
-	}
-}
-
-void displayFPSCountCallback(int value)
-{
-	if (glutGetWindow())
-	{
-		float fpsCount = 0;
-		int i;
-		for (i = 0; i < TARGET_FPS; i++)
-		{
-			if (deltaTimes[i] == 0)
-				break;
-			fpsCount += deltaTimes[i];
-		}
-
-		fpsCount  = 1000.0 / (fpsCount / i + 1);
-
-		char titleBuffer[16];
-		sprintf(titleBuffer, "FPS: %3.1f", fpsCount);
-		glutSetWindowTitle(titleBuffer);
-
-		// Refresh callback
-		glutTimerFunc(FPS_DISPLAY_REFRESH_TIME, displayFPSCountCallback, NULL);
-	}
 }
 
 void draw()
@@ -238,13 +197,80 @@ void cleanup()
 	checkCudaErrors(cudaFree(fb));
 }
 
+void rerender()
+{
+	start = std::chrono::high_resolution_clock::now();
+	render << <blocks, threads >> > (fb, screenWidth, screenHeight, currentScene, globalState);
+	checkCudaErrors(cudaGetLastError());
+	checkCudaErrors(cudaDeviceSynchronize());
+	end = std::chrono::high_resolution_clock::now();
+	std::cout << "Render kernel time:\t\t\t" << (end - start) / std::chrono::milliseconds(1) << "\tms" << std::endl;
+	lastRenderTime = (end - start) / std::chrono::milliseconds(1);
+}
+
+void glutHandleKeyboard(unsigned char key, int x, int y)
+{
+	switch (key)
+	{
+	case 'w':
+		start = std::chrono::high_resolution_clock::now();
+		updateCameraPosition <<<1, 1 >>> (vec3(0, 0, -1));
+		checkCudaErrors(cudaGetLastError());
+		checkCudaErrors(cudaDeviceSynchronize());
+		std::cout << "Pressed W" << std::endl;
+		rerender();
+		break;
+	case 's':
+		start = std::chrono::high_resolution_clock::now();
+		updateCameraPosition << <1, 1 >> > (vec3(0, 0, 1));
+		checkCudaErrors(cudaGetLastError());
+		checkCudaErrors(cudaDeviceSynchronize());
+		std::cout << "Pressed S" << std::endl;
+		rerender();
+		break;
+	case 'a':
+		start = std::chrono::high_resolution_clock::now();
+		updateCameraPosition << <1, 1 >> > (vec3(-1, 0, 0));
+		checkCudaErrors(cudaGetLastError());
+		checkCudaErrors(cudaDeviceSynchronize());
+		std::cout << "Pressed A" << std::endl;
+		rerender();
+		break;
+	case 'd':
+		start = std::chrono::high_resolution_clock::now();
+		updateCameraPosition << <1, 1 >> > (vec3(1, 0, 0));
+		checkCudaErrors(cudaGetLastError());
+		checkCudaErrors(cudaDeviceSynchronize());
+		std::cout << "Pressed D" << std::endl;
+		rerender();
+		break;
+	case 'r':
+		start = std::chrono::high_resolution_clock::now();
+		updateCameraPosition << <1, 1 >> > (vec3(0, 1, 0));
+		checkCudaErrors(cudaGetLastError());
+		checkCudaErrors(cudaDeviceSynchronize());
+		std::cout << "Pressed R" << std::endl;
+		rerender();
+		break;
+	case 'f':
+		start = std::chrono::high_resolution_clock::now();
+		updateCameraPosition << <1, 1 >> > (vec3(0, -1, 0));
+		checkCudaErrors(cudaGetLastError());
+		checkCudaErrors(cudaDeviceSynchronize());
+		std::cout << "Pressed F" << std::endl;
+		rerender();
+		break;
+	}
+
+}
+
 void initGL(int argc, char **args)
 {
 	glutInit(&argc, args);
 	glutInitDisplayMode(GLUT_RGBA);
 	glutInitWindowSize(screenWidth, screenHeight);
 	glutInitWindowPosition(10, 10);
-	glutCreateWindow("OKNO");
+	glutCreateWindow("RayTracer");
 
 	glMatrixMode(GL_PROJECTION);
 	glOrtho(0, screenWidth, 0, screenHeight, -1, 1);
@@ -253,33 +279,47 @@ void initGL(int argc, char **args)
 	glClearColor(1.0, 0.0, 1.0, 0.0);
 
 	glutDisplayFunc(displayCallback);
+	glutKeyboardFunc(glutHandleKeyboard);
 	glutTimerFunc((unsigned int)(1000.0 / TARGET_FPS), refreshFrameCallback, NULL);
 	glutTimerFunc(FPS_DISPLAY_REFRESH_TIME, displayFPSCountCallback, NULL);
 }
 
+void writeStartInfo()
+{
+	std::cout << "\tQuality info:" << std::endl
+		<< "\t\tSamples per pixel: " << SAMPLES_PER_PIXEL << std::endl
+		<< "\t\tScatter depth: " << MAX_SCATTER_DEPTH << std::endl
+		<< "\t\tScene elements: " << SCENE_ELEMENTS << std::endl
+		<< "\t\tGamma correction: " <<
+#ifdef DIFFUSE_HALF_SPHERE
+		"Yes"
+#else
+		"No"
+#endif
+		<< std::endl
+		<< "\t\tDiffuse half sphere: " <<
+#ifdef USE_GAMMA_CORRECTION
+		"Yes"
+#else
+		"No"
+#endif
+		<< std::endl;
+}
+
 int main(int argc, char** args)
 {
-	std::chrono::steady_clock::time_point start, end;
-
 	int numPixels = screenWidth * screenHeight;
 
-	curandState* globalState;
-
-	scene** dScene;
-	rayHittable** dObjects;
-
-	int tx = 8;
-	int ty = 8;
-	dim3 blocks(screenWidth / tx + 1, screenHeight / ty + 1);
-	dim3 threads(tx, ty);
+	writeStartInfo();
 
 	// Init GL
 	initGL(argc, args);
+	std::cout << "GL initialized" << std::endl;
 
 	// CUDA mallocs
 	start = std::chrono::high_resolution_clock::now();
 	checkCudaErrors(cudaMallocManaged((void**)&dObjects, SCENE_ELEMENTS * sizeof(rayHittable*)));
-	checkCudaErrors(cudaMallocManaged((void**)&dScene, sizeof(scene)));
+	checkCudaErrors(cudaMallocManaged((void**)&dSceneAll, sizeof(scene)));
 	checkCudaErrors(cudaMallocManaged(&fb, numPixels * sizeof(vec3)));
 	checkCudaErrors(cudaMallocManaged(&globalState, numPixels * sizeof(curandState)));
 	end = std::chrono::high_resolution_clock::now();
@@ -287,12 +327,14 @@ int main(int argc, char** args)
 
 	// Create scene kernel
 	start = std::chrono::high_resolution_clock::now();
-	createScene <<<1, 1>>> (dObjects, dScene);
+	createSceneAll <<<1, 1>>> (dObjects, dSceneAll);
 	checkCudaErrors(cudaGetLastError());
 	checkCudaErrors(cudaDeviceSynchronize());
 	end = std::chrono::high_resolution_clock::now();
 	std::cout << "Create scene kernel time:\t\t" << (end - start) / std::chrono::milliseconds(1) << "\tms" << std::endl;
 	
+	currentScene = dSceneAll;
+
 	// Create camera kernel
 	start = std::chrono::high_resolution_clock::now();
 	createCamera << <1, 1 >> > (screenWidth, screenHeight);
@@ -310,12 +352,7 @@ int main(int argc, char** args)
 	std::cout << "RNG states init kernel time:\t\t" << (end - start) / std::chrono::milliseconds(1) << "\tms" << std::endl;
 
 	// Render kernel
-	start = std::chrono::high_resolution_clock::now();
-	render <<<blocks, threads >>> (fb, screenWidth, screenHeight, dScene, globalState);
-	checkCudaErrors(cudaGetLastError());
-	checkCudaErrors(cudaDeviceSynchronize());
-	end = std::chrono::high_resolution_clock::now();
-	std::cout << "Render kernel time:\t\t\t" << (end - start) / std::chrono::milliseconds(1) << "\tms" << std::endl;
+	rerender();
 
 	glutMainLoop();
 

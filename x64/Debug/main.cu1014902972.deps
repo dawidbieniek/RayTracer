@@ -175,6 +175,7 @@ C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include\vector_function
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include\vector_types.h
 D:\Projekty\RayTracer\camera.h
 D:\Projekty\RayTracer\doubleUtils.h
+D:\Projekty\RayTracer\fpsCounter.h
 D:\Projekty\RayTracer\material.h
 D:\Projekty\RayTracer\packages\nupengl.core.0.1.0.1\build\native\include\GL\freeglut_std.h
 D:\Projekty\RayTracer\packages\nupengl.core.0.1.0.1\build\native\include\GL\glut.h

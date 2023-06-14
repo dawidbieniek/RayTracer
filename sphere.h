@@ -20,7 +20,7 @@ private:
 };
 
 // Casts ray to hit sphere. Returns true if hit and false when missed. rec contains hitInfo
-__device__ bool sphere::hit(const ray& r, double tMin, double tMax, hitInfo& hit) const 
+__device__ inline bool sphere::hit(const ray& r, double tMin, double tMax, hitInfo& hit) const 
 {
 	vec3 oc = r.origin() - center;
 	float a = r.direction().lengthSquared();
