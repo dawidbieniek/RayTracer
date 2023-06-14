@@ -1,6 +1,6 @@
 // Standard libs
 #include <iostream>
-#include <memory>
+#include <chrono>
 
 // GL libs
 #include <GL/glut.h>
@@ -105,7 +105,7 @@ __global__ void createCamera(int width, int height)
 {
 	if (threadIdx.x == 0 && blockIdx.x == 0)
 	{
-		dCam = camera(width, height);
+		dCam = camera(vec3(0, 0, 1), vec3(0,0,-1), vec3(0,1,0), 45.0, width/height);
 	}
 }
 
@@ -259,44 +259,63 @@ void initGL(int argc, char **args)
 
 int main(int argc, char** args)
 {
-	// Create scene
-	rayHittable** dObjects;
-	checkCudaErrors(cudaMallocManaged((void**)&dObjects, SCENE_ELEMENTS * sizeof(rayHittable*)));
-	scene** dScene;
-	checkCudaErrors(cudaMallocManaged((void**)&dScene, sizeof(scene)));
+	std::chrono::steady_clock::time_point start, end;
 
-	createScene <<<1, 1>>> (dObjects, dScene);
-	checkCudaErrors(cudaGetLastError());
-	checkCudaErrors(cudaDeviceSynchronize());
-	
-	// Create camera
-	createCamera << <1, 1 >> > (screenWidth, screenHeight);
-	checkCudaErrors(cudaGetLastError());
-	checkCudaErrors(cudaDeviceSynchronize());
-	// Init values for kernels
 	int numPixels = screenWidth * screenHeight;
-	size_t fbSize = numPixels * sizeof(vec3);
-	checkCudaErrors(cudaMallocManaged(&fb, fbSize));
+
+	curandState* globalState;
+
+	scene** dScene;
+	rayHittable** dObjects;
 
 	int tx = 8;
 	int ty = 8;
 	dim3 blocks(screenWidth / tx + 1, screenHeight / ty + 1);
 	dim3 threads(tx, ty);
 
-	// Setup RNG
-	curandState* globalState;
+	// Init GL
+	initGL(argc, args);
+
+	// CUDA mallocs
+	start = std::chrono::high_resolution_clock::now();
+	checkCudaErrors(cudaMallocManaged((void**)&dObjects, SCENE_ELEMENTS * sizeof(rayHittable*)));
+	checkCudaErrors(cudaMallocManaged((void**)&dScene, sizeof(scene)));
+	checkCudaErrors(cudaMallocManaged(&fb, numPixels * sizeof(vec3)));
 	checkCudaErrors(cudaMallocManaged(&globalState, numPixels * sizeof(curandState)));
+	end = std::chrono::high_resolution_clock::now();
+	std::cout << "Cuda mallocs time:\t\t\t" << (end - start) / std::chrono::milliseconds(1) << "\tms" << std::endl;
+
+	// Create scene kernel
+	start = std::chrono::high_resolution_clock::now();
+	createScene <<<1, 1>>> (dObjects, dScene);
+	checkCudaErrors(cudaGetLastError());
+	checkCudaErrors(cudaDeviceSynchronize());
+	end = std::chrono::high_resolution_clock::now();
+	std::cout << "Create scene kernel time:\t\t" << (end - start) / std::chrono::milliseconds(1) << "\tms" << std::endl;
+	
+	// Create camera kernel
+	start = std::chrono::high_resolution_clock::now();
+	createCamera << <1, 1 >> > (screenWidth, screenHeight);
+	checkCudaErrors(cudaGetLastError());
+	checkCudaErrors(cudaDeviceSynchronize());
+	end = std::chrono::high_resolution_clock::now();
+	std::cout << "Create camera kernel time:\t\t" << (end - start) / std::chrono::milliseconds(1) << "\tms" << std::endl;
+
+	// Setup RNG kernel
+	start = std::chrono::high_resolution_clock::now();
 	setupRNG << <blocks, threads >> > (globalState, time(NULL), screenWidth);
 	checkCudaErrors(cudaGetLastError());
 	checkCudaErrors(cudaDeviceSynchronize());
+	end = std::chrono::high_resolution_clock::now();
+	std::cout << "RNG states init kernel time:\t\t" << (end - start) / std::chrono::milliseconds(1) << "\tms" << std::endl;
 
-	
-	// Setup render kernel
-	initGL(argc, args);
-
+	// Render kernel
+	start = std::chrono::high_resolution_clock::now();
 	render <<<blocks, threads >>> (fb, screenWidth, screenHeight, dScene, globalState);
 	checkCudaErrors(cudaGetLastError());
 	checkCudaErrors(cudaDeviceSynchronize());
+	end = std::chrono::high_resolution_clock::now();
+	std::cout << "Render kernel time:\t\t\t" << (end - start) / std::chrono::milliseconds(1) << "\tms" << std::endl;
 
 	glutMainLoop();
 
