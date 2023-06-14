@@ -39,7 +39,7 @@ void check_cuda(cudaError_t result, char const* const func, const char* const fi
 #include "camera.h"
 
 #define USE_GAMMA_CORRECTION
-#define DIFFUSE_HALF_SPHERE
+//#define DIFFUSE_HALF_SPHERE
 
 static const int TARGET_FPS = 60;
 static const unsigned int FPS_DISPLAY_REFRESH_TIME = 500;
